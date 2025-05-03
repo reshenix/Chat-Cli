@@ -2,45 +2,55 @@
 # server.py
 import websockets
 import asyncio
+import logging
+
+# Setting up logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+class Client:
+    def __init__(self, websocket):
+        self.websocket = websocket
+        self.remote_address = websocket.remote_address
 
 clients = set()
 
 async def handler(websocket):
-    await connect(websocket)
+    client = Client(websocket)
+    await connect(client)
     try:
         # Listen for incoming messages
         async for message in websocket:
-            await broadcast(message, websocket)
+            await broadcast(message, client)
     except websockets.exceptions.ConnectionClosed:
-        pass
+        logging.info(f"{client.remote_address} disconnected.")
     finally:
         # Remove client from the list of connected clients
-        await disconnect(websocket)
+        await disconnect(client)
 
-# Broadcast message to all connected clients except the sender
-async def broadcast(message, websocket):
+# Broadcast message to all connected clients, except the sender (if sender is provided)
+async def broadcast(message, sender=None):
     for client in clients:
-        if client != websocket:
+        # Check if this client is not the sender
+        if client != sender:
             try:
-                await client.send(message)
+                await client.websocket.send(message)
             except websockets.exceptions.ConnectionClosed:
                 # Remove client from the list of connected clients
                 await disconnect(client)
 
 # Connect client to the server
-async def connect(websocket):
-    clients.add(websocket)
-    await broadcast(f"{websocket.remote_address} connected.", websocket)
+async def connect(client):
+    clients.add(client)
+    logging.info(f"{client.remote_address} connected.")
+    await broadcast(f"{client.remote_address} connected.", client)
 
 # Disconnect client from the server
-async def disconnect(websocket):
-    clients.discard(websocket)
+async def disconnect(client):
+    clients.discard(client)
     try:
-        await broadcast(f"{websocket.remote_address} disconnected.", websocket)
+        await broadcast(f"{client.remote_address} disconnected.", client)
     except websockets.exceptions.ConnectionClosed:
-        pass
-    finally:
-        await websocket.close()
+        logging.info(f"{client.remote_address} disconnected.")
 
 # Main function to run the server
 async def main():
