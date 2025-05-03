@@ -18,6 +18,8 @@ async def send_messages(websocket):
     while True:
         try:
             message = await ainput()
+            if not message:
+                return
             await websocket.send(message)
         except websockets.exceptions.ConnectionClosed:
             print("Connection closed.")
